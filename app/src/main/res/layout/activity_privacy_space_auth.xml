@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background">
+
+    <!-- Top back button -->
+    <ImageButton
+        android:id="@+id/btn_auth_back"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="16dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@null"
+        android:src="@drawable/ic_back"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:tint="@color/on_background" />
+
+    <!-- Lock Icon & Header -->
+    <LinearLayout
+        android:id="@+id/layout_auth_header"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toTopOf="@id/layout_pin_dots"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btn_auth_back"
+        app:layout_constraintVertical_bias="0.4">
+
+        <ImageView
+            android:id="@+id/iv_auth_lock"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:background="@drawable/bg_pin_button"
+            android:contentDescription="@null"
+            android:padding="16dp"
+            android:src="@drawable/ic_lock"
+            app:tint="@color/primary" />
+
+        <TextView
+            android:id="@+id/tv_auth_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="@string/pin_prompt_enter"
+            android:textColor="@color/on_surface"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tv_auth_subtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Enter your secure PIN to access hidden clones"
+            android:textColor="@color/on_surface_variant"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- 4 PIN Dots -->
+    <LinearLayout
+        android:id="@+id/layout_pin_dots"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="horizontal"
+        app:layout_constraintBottom_toTopOf="@id/grid_keypad"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/layout_auth_header"
+        app:layout_constraintVertical_bias="0.4">
+
+        <View
+            android:id="@+id/dot_1"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_margin="10dp"
+            android:background="@drawable/bg_pin_dot" />
+
+        <View
+            android:id="@+id/dot_2"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_margin="10dp"
+            android:background="@drawable/bg_pin_dot" />
+
+        <View
+            android:id="@+id/dot_3"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_margin="10dp"
+            android:background="@drawable/bg_pin_dot" />
+
+        <View
+            android:id="@+id/dot_4"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_margin="10dp"
+            android:background="@drawable/bg_pin_dot" />
+    </LinearLayout>
+
+    <!-- Numeric Keypad Grid (3 columns, 4 rows) -->
+    <GridLayout
+        android:id="@+id/grid_keypad"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="36dp"
+        android:alignmentMode="alignMargins"
+        android:columnCount="3"
+        android:rowCount="4"
+        android:useDefaultMargins="true"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <!-- 1 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_key_1"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="@dimen/pin_button_size"
+            android:layout_height="@dimen/pin_button_size"
+            android:text="1"
+            android:textSize="22sp"
+            app:cornerRadius="34dp" />
+
+        <!-- 2 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_key_2"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="@dimen/pin_button_size"
+            android:layout_height="@dimen/pin_button_size"
+            android:text="2"
+            android:textSize="22sp"
+            app:cornerRadius="34dp" />
+
+        <!-- 3 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_key_3"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="@dimen/pin_button_size"
+            android:layout_height="@dimen/pin_button_size"
+            android:text="3"
+            android:textSize="22sp"
+            app:cornerRadius="34dp" />
+
+        <!-- 4 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_key_4"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="@dimen/pin_button_size"
+            android:layout_height="@dimen/pin_button_size"
+            android:text="4"
+            android:textSize="22sp"
+            app:cornerRadius="34dp" />
+
+        <!-- 5 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_key_5"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="@dimen/pin_button_size"
+            android:layout_height="@dimen/pin_button_size"
+            android:text="5"
+            android:textSize="22sp"
+            app:cornerRadius="34dp" />
+
+        <!-- 6 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_key_6"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="@dimen/pin_button_size"
+            android:layout_height="@dimen/pin_button_size"
+            android:text="6"
+            android:textSize="22sp"
+            app:cornerRadius="34dp" />
+
+        <!-- 7 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_key_7"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="@dimen/pin_button_size"
+            android:layout_height="@dimen/pin_button_size"
+            android:text="7"
+            android:textSize="22sp"
+            app:cornerRadius="34dp" />
+
+        <!-- 8 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_key_8"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="@dimen/pin_button_size"
+            android:layout_height="@dimen/pin_button_size"
+            android:text="8"
+            android:textSize="22sp"
+            app:cornerRadius="34dp" />
+
+        <!-- 9 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_key_9"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="@dimen/pin_button_size"
+            android:layout_height="@dimen/pin_button_size"
+            android:text="9"
+            android:textSize="22sp"
+            app:cornerRadius="34dp" />
+
+        <!-- Clear / Empty -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_key_clear"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="@dimen/pin_button_size"
+            android:layout_height="@dimen/pin_button_size"
+            android:text="C"
+            android:textSize="18sp"
+            app:cornerRadius="34dp" />
+
+        <!-- 0 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_key_0"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="@dimen/pin_button_size"
+            android:layout_height="@dimen/pin_button_size"
+            android:text="0"
+            android:textSize="22sp"
+            app:cornerRadius="34dp" />
+
+        <!-- Backspace -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_key_backspace"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="@dimen/pin_button_size"
+            android:layout_height="@dimen/pin_button_size"
+            app:cornerRadius="34dp"
+            app:icon="@drawable/ic_backspace"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp"
+            app:iconSize="24dp"
+            app:iconTint="@color/on_surface" />
+    </GridLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
