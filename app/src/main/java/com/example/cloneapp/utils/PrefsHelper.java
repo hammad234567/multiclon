@@ -128,13 +128,13 @@ public class PrefsHelper {
     // ----------------------------------------------------
 
     public void saveClonePrivacy(String cloneId, DeviceProfile profile) {
-        SharedPreferences prefs = context.getSharedPreferences("clone_privacy_" + cloneId, Context.MODE_PRIVATE);
+        SharedPreferences prefs = context.getSharedPreferences("clone_privacy_" + cloneId, Context.MODE_PRIVATE | Context.MODE_MULTI_PROCESS);
         String json = gson.toJson(profile);
         prefs.edit().putString("device_profile_json", json).apply();
     }
 
     public DeviceProfile getClonePrivacy(String cloneId) {
-        SharedPreferences prefs = context.getSharedPreferences("clone_privacy_" + cloneId, Context.MODE_PRIVATE);
+        SharedPreferences prefs = context.getSharedPreferences("clone_privacy_" + cloneId, Context.MODE_PRIVATE | Context.MODE_MULTI_PROCESS);
         String json = prefs.getString("device_profile_json", null);
         if (json != null && !json.isEmpty()) {
             try {
@@ -162,7 +162,7 @@ public class PrefsHelper {
     }
 
     public void saveCloneGps(String cloneId, double lat, double lng, boolean enabled) {
-        SharedPreferences prefs = context.getSharedPreferences("clone_gps_" + cloneId, Context.MODE_PRIVATE);
+        SharedPreferences prefs = context.getSharedPreferences("clone_gps_" + cloneId, Context.MODE_PRIVATE | Context.MODE_MULTI_PROCESS);
         prefs.edit()
                 .putString("latitude", String.valueOf(lat))
                 .putString("longitude", String.valueOf(lng))
@@ -171,7 +171,7 @@ public class PrefsHelper {
     }
 
     public GpsConfig getCloneGps(String cloneId) {
-        SharedPreferences prefs = context.getSharedPreferences("clone_gps_" + cloneId, Context.MODE_PRIVATE);
+        SharedPreferences prefs = context.getSharedPreferences("clone_gps_" + cloneId, Context.MODE_PRIVATE | Context.MODE_MULTI_PROCESS);
         String latStr = prefs.getString("latitude", "40.7128"); // default New York
         String lngStr = prefs.getString("longitude", "-74.0060");
         boolean enabled = prefs.getBoolean("enabled", false);

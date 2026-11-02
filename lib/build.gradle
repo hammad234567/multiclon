@@ -1,0 +1,50 @@
+// VirtualApp engine (asLody/VirtualApp) packaged as an Android library module.
+// Adapted from the original 2017 Gradle script to work with AGP 8.x.
+plugins {
+    id 'com.android.library'
+}
+
+android {
+    namespace 'com.lody.virtual'
+    compileSdk 34
+
+    // The VA native code (HookZz / Substrate / gnustl) was written for the old GCC-era NDK.
+    // If the build fails with a missing NDK, install this exact version from SDK Manager > SDK Tools > NDK (Side by side).
+    ndkVersion '16.1.4479499'
+
+    defaultConfig {
+        minSdk 21
+        targetSdk 22
+        consumerProguardFiles 'proguard-rules.pro'
+        externalNativeBuild {
+            ndkBuild {
+                abiFilters "armeabi-v7a", "x86"
+            }
+        }
+    }
+
+    externalNativeBuild {
+        ndkBuild {
+            path file("src/main/jni/Android.mk")
+        }
+    }
+
+    buildFeatures {
+        aidl true
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    lint {
+        abortOnError false
+        disable 'NewApi', 'OnClick'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+}

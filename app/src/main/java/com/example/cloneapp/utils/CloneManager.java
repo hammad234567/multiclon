@@ -4,17 +4,32 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Log;
 import android.widget.Toast;
 
 import com.example.cloneapp.models.CloneModel;
+import com.example.cloneapp.utils.PrefsHelper.GpsConfig;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+
+import com.lody.virtual.client.core.InstallStrategy;
+import com.lody.virtual.client.core.VirtualCore;
+import com.lody.virtual.client.ipc.VActivityManager;
+import com.lody.virtual.client.ipc.VirtualLocationManager;
+import com.lody.virtual.os.VUserInfo;
+import com.lody.virtual.os.VUserManager;
+import com.lody.virtual.remote.InstallResult;
+import com.lody.virtual.remote.InstalledAppInfo;
+import com.lody.virtual.remote.vloc.VLocation;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Singleton manager handling clone lifecycle, persistence to SharedPreferences via Gson,
@@ -29,10 +44,19 @@ public class CloneManager {
     private final Context context;
     private final SharedPreferences prefs;
     private final Gson gson;
+    private static final String TAG = "CloneManager";
+    private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    /** Result callback for engine operations (always delivered on the main thread). */
+    public interface Callback {
+        void onSuccess();
+        void onError(String message);
+    }
 
     private CloneManager(Context context) {
         this.context = context.getApplicationContext();
-        this.prefs = this.context.getSharedPreferences(PREF_CLONES_NAME, Context.MODE_PRIVATE);
+        this.prefs = this.context.getSharedPreferences(PREF_CLONES_NAME, Context.MODE_PRIVATE | Context.MODE_MULTI_PROCESS);
         this.gson = new Gson();
     }
 
@@ -147,49 +171,160 @@ public class CloneManager {
         return hidden;
     }
 
+    /** Find the clone for a (VirtualApp user space, package) pair; user ids are shared across apps. */
+    public synchronized CloneModel getCloneByVirtualUser(int userId, String pkg) {
+        for (CloneModel c : getAllClones()) {
+            if (c.getVirtualUserId() == userId && c.getTargetPackage() != null
+                    && c.getTargetPackage().equals(pkg)) return c;
+        }
+        return null;
+    }
+
+    private void ensureEngine() {
+        if (!VirtualCore.get().isEngineLaunched()) {
+            VirtualCore.get().waitForEngine();
+        }
+    }
+
     /**
-     * Launches a clone instance in an independent Android task stack.
-     * Uses custom taskAffinity via FLAG_ACTIVITY_NEW_TASK, FLAG_ACTIVITY_MULTIPLE_TASK,
-     * FLAG_ACTIVITY_NEW_DOCUMENT and a distinct clone URI so it appears as its own task in Recents.
+     * Installs the target app into the VirtualApp engine in its own user space (so it has its
+     * own data/accounts), then stores the clone. Heavy work runs off the UI thread.
      */
-    public void launchClone(Context ctx, CloneModel clone) {
+    public void addCloneAsync(final CloneModel clone, final Callback cb) {
+        worker.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    ensureEngine();
+                    String pkg = clone.getTargetPackage();
+                    InstalledAppInfo info = VirtualCore.get().getInstalledAppInfo(pkg, 0);
+                    int userId;
+                    if (info == null) {
+                        String apk = context.getPackageManager().getApplicationInfo(pkg, 0).sourceDir;
+                        InstallResult res = VirtualCore.get().installPackage(apk,
+                                InstallStrategy.COMPARE_VERSION | InstallStrategy.SKIP_DEX_OPT);
+                        if (!res.isSuccess) {
+                            throw new IllegalStateException("Engine install failed: " + res.error);
+                        }
+                        userId = 0;
+                    } else {
+                        // pick the lowest free user slot, creating the user space if needed
+                        int[] used = info.getInstalledUsers();
+                        userId = used.length;
+                        for (int i = 0; i < used.length; i++) {
+                            if (used[i] != i) {
+                                userId = i;
+                                break;
+                            }
+                        }
+                        if (VUserManager.get().getUserInfo(userId) == null) {
+                            VUserInfo created = VUserManager.get().createUser("Space " + (userId + 1), VUserInfo.FLAG_ADMIN);
+                            if (created == null) throw new IllegalStateException("Could not create user space");
+                        }
+                        if (!VirtualCore.get().installPackageAsUser(userId, pkg)) {
+                            throw new IllegalStateException("Engine install for user " + userId + " failed");
+                        }
+                    }
+                    try {
+                        VirtualCore.get().preOpt(pkg);
+                    } catch (Exception e) {
+                        Log.w(TAG, "preOpt failed", e);
+                    }
+                    clone.setVirtualUserId(userId);
+                    addClone(clone);
+                    postSuccess(cb);
+                } catch (Throwable t) {
+                    Log.e(TAG, "addCloneAsync failed", t);
+                    postError(cb, String.valueOf(t.getMessage()));
+                }
+            }
+        });
+    }
+
+    /** Removes the clone record and its virtual app data from the engine. */
+    public void removeCloneAsync(final CloneModel clone, final Callback cb) {
+        worker.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (clone.getVirtualUserId() >= 0) {
+                        ensureEngine();
+                        VirtualCore.get().uninstallPackageAsUser(clone.getTargetPackage(), clone.getVirtualUserId());
+                    }
+                } catch (Throwable t) {
+                    Log.e(TAG, "engine uninstall failed", t);
+                }
+                removeClone(clone.getId());
+                postSuccess(cb);
+            }
+        });
+    }
+
+    /** Pushes the clone's fake-GPS settings into the engine. */
+    private void applyGps(CloneModel clone) {
+        try {
+            GpsConfig gps = PrefsHelper.getInstance(context).getCloneGps(clone.getId());
+            VirtualLocationManager vlm = VirtualLocationManager.get();
+            if (gps != null && gps.enabled) {
+                VLocation loc = new VLocation();
+                loc.latitude = gps.latitude;
+                loc.longitude = gps.longitude;
+                loc.accuracy = 8f;
+                vlm.setMode(clone.getVirtualUserId(), clone.getTargetPackage(), VirtualLocationManager.MODE_USE_SELF);
+                vlm.setLocation(clone.getVirtualUserId(), clone.getTargetPackage(), loc);
+            } else {
+                vlm.setMode(clone.getVirtualUserId(), clone.getTargetPackage(), VirtualLocationManager.MODE_CLOSE);
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "applyGps failed", t);
+        }
+    }
+
+    /**
+     * Launches a clone inside the VirtualApp engine, in its own user space.
+     */
+    public void launchClone(final Context ctx, final CloneModel clone) {
         if (clone == null || clone.getTargetPackage() == null) {
             Toast.makeText(ctx, "Invalid clone configuration", Toast.LENGTH_SHORT).show();
             return;
         }
-
-        PackageManager pm = ctx.getPackageManager();
-        Intent launchIntent = pm.getLaunchIntentForPackage(clone.getTargetPackage());
-
-        if (launchIntent == null) {
-            Toast.makeText(ctx, "Target application " + clone.getTargetPackage() + " is not installed.", Toast.LENGTH_LONG).show();
+        if (clone.getVirtualUserId() < 0) {
+            Toast.makeText(ctx, "This clone was created before the engine was added. Please delete and re-create it.", Toast.LENGTH_LONG).show();
             return;
         }
+        Toast.makeText(ctx, "Launching " + clone.getCustomName() + "...", Toast.LENGTH_SHORT).show();
+        worker.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    ensureEngine();
+                    applyGps(clone);
+                    Intent intent = VirtualCore.get().getLaunchIntent(clone.getTargetPackage(), clone.getVirtualUserId());
+                    if (intent == null) {
+                        throw new IllegalStateException("Clone is not installed in the engine");
+                    }
+                    VActivityManager.get().startActivity(intent, clone.getVirtualUserId());
+                } catch (final Throwable t) {
+                    Log.e(TAG, "launchClone failed", t);
+                    mainHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            Toast.makeText(ctx, "Failed to launch clone: " + t.getMessage(), Toast.LENGTH_LONG).show();
+                        }
+                    });
+                }
+            }
+        });
+    }
 
-        // Configure task isolation flags:
-        // FLAG_ACTIVITY_NEW_TASK: starts activity in a new task
-        // FLAG_ACTIVITY_MULTIPLE_TASK: generates a new task unconditionally
-        // FLAG_ACTIVITY_NEW_DOCUMENT: opens activity as a distinct document in the Recents screen
-        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        launchIntent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
-        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
+    private void postSuccess(final Callback cb) {
+        if (cb == null) return;
+        mainHandler.post(new Runnable() { @Override public void run() { cb.onSuccess(); } });
+    }
 
-        // Distinguish the intent so Android creates an independent task entry in Recents
-        launchIntent.setData(Uri.parse("cloneapp://" + clone.getTargetPackage() + "/" + clone.getId()));
-        launchIntent.setAction(Intent.ACTION_MAIN);
-        launchIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-
-        // Pass clone identifier extras
-        launchIntent.putExtra("com.example.cloneapp.EXTRA_CLONE_ID", clone.getId());
-        launchIntent.putExtra("com.example.cloneapp.EXTRA_CUSTOM_NAME", clone.getCustomName());
-        launchIntent.putExtra("com.example.cloneapp.EXTRA_AFFINITY_SUFFIX", clone.getId());
-
-        try {
-            ctx.startActivity(launchIntent);
-            Toast.makeText(ctx, "Launching " + clone.getCustomName() + "...", Toast.LENGTH_SHORT).show();
-        } catch (Exception e) {
-            Toast.makeText(ctx, "Failed to launch clone: " + e.getMessage(), Toast.LENGTH_LONG).show();
-        }
+    private void postError(final Callback cb, final String msg) {
+        if (cb == null) return;
+        mainHandler.post(new Runnable() { @Override public void run() { cb.onError(msg); } });
     }
 
     /**

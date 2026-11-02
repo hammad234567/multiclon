@@ -256,9 +256,20 @@ public class MainActivity extends AppCompatActivity implements CloneListAdapter.
                                 false,
                                 System.currentTimeMillis()
                         );
-                        cloneManager.addClone(newClone);
-                        Toast.makeText(MainActivity.this, R.string.clone_success, Toast.LENGTH_SHORT).show();
-                        binding.bottomNav.setSelectedItemId(R.id.nav_home);
+                        Toast.makeText(MainActivity.this, "Cloning, please wait...", Toast.LENGTH_SHORT).show();
+                        cloneManager.addCloneAsync(newClone, new CloneManager.Callback() {
+                            @Override
+                            public void onSuccess() {
+                                Toast.makeText(MainActivity.this, R.string.clone_success, Toast.LENGTH_SHORT).show();
+                                refreshClonesList();
+                                binding.bottomNav.setSelectedItemId(R.id.nav_home);
+                            }
+
+                            @Override
+                            public void onError(String message) {
+                                Toast.makeText(MainActivity.this, "Clone failed: " + message, Toast.LENGTH_LONG).show();
+                            }
+                        });
                     }
                 })
                 .setNegativeButton(R.string.btn_cancel, null)
@@ -370,9 +381,18 @@ public class MainActivity extends AppCompatActivity implements CloneListAdapter.
                 .setPositiveButton(R.string.dialog_delete_confirm, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
-                        cloneManager.removeClone(clone.getId());
-                        refreshClonesList();
-                        Toast.makeText(MainActivity.this, "Clone deleted", Toast.LENGTH_SHORT).show();
+                        cloneManager.removeCloneAsync(clone, new CloneManager.Callback() {
+                            @Override
+                            public void onSuccess() {
+                                refreshClonesList();
+                                Toast.makeText(MainActivity.this, "Clone deleted", Toast.LENGTH_SHORT).show();
+                            }
+
+                            @Override
+                            public void onError(String message) {
+                                Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show();
+                            }
+                        });
                     }
                 })
                 .setNegativeButton(R.string.btn_cancel, null)

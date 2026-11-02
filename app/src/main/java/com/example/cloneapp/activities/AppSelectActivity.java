@@ -139,8 +139,19 @@ public class AppSelectActivity extends AppCompatActivity implements AppSelectAda
                                 System.currentTimeMillis()
                         );
 
-                        CloneManager.getInstance(AppSelectActivity.this).addClone(newClone);
-                        Toast.makeText(AppSelectActivity.this, R.string.clone_success, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(AppSelectActivity.this, "Cloning, please wait...", Toast.LENGTH_SHORT).show();
+                        final android.content.Context appCtx = getApplicationContext();
+                        CloneManager.getInstance(appCtx).addCloneAsync(newClone, new CloneManager.Callback() {
+                            @Override
+                            public void onSuccess() {
+                                Toast.makeText(appCtx, R.string.clone_success, Toast.LENGTH_SHORT).show();
+                            }
+
+                            @Override
+                            public void onError(String message) {
+                                Toast.makeText(appCtx, "Clone failed: " + message, Toast.LENGTH_LONG).show();
+                            }
+                        });
                         finish();
                     }
                 })

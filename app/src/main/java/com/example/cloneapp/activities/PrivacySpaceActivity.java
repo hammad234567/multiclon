@@ -137,9 +137,15 @@ public class PrivacySpaceActivity extends AppCompatActivity implements CloneList
                 .setPositiveButton(R.string.dialog_delete_confirm, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
-                        cloneManager.removeClone(clone.getId());
-                        refreshHiddenClones();
-                        Toast.makeText(PrivacySpaceActivity.this, "Clone deleted", Toast.LENGTH_SHORT).show();
+                        cloneManager.removeCloneAsync(clone, new CloneManager.Callback() {
+                            @Override public void onSuccess() {
+                                refreshHiddenClones();
+                                Toast.makeText(PrivacySpaceActivity.this, "Clone deleted", Toast.LENGTH_SHORT).show();
+                            }
+                            @Override public void onError(String message) {
+                                Toast.makeText(PrivacySpaceActivity.this, message, Toast.LENGTH_LONG).show();
+                            }
+                        });
                     }
                 })
                 .setNegativeButton(R.string.btn_cancel, null)

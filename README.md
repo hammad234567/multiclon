@@ -107,3 +107,15 @@ MultiClone/
 
 ## 📄 License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## ⚙️ VirtualApp engine
+
+Cloning is powered by [asLody/VirtualApp](https://github.com/asLody/VirtualApp), included as the `:lib` module.
+
+* Every clone gets its own VA *user space* (`CloneModel.virtualUserId`), so data, accounts and logins are fully separate.
+* `CloneApp` boots the engine; `CloneManager` installs / launches / uninstalls clones through `VirtualCore`.
+* Per-clone IMEI (`DeviceProfile`) and fake GPS (`GpsSettingActivity`) are applied inside the virtual process.
+* Build requirements: Android NDK **r16b** (`16.1.4479499`) for the legacy native code; ABIs `armeabi-v7a` and `x86`.
+* `targetSdk` is **22** because the engine requires it. The 2017 engine only works reliably on Android 5–8.

@@ -11,3 +11,8 @@
     java.lang.Object writeReplace();
     java.lang.Object readResolve();
 }
+
+# VirtualApp engine
+-keep class com.lody.virtual.** { *; }
+-keep class mirror.** { *; }
+-keep class android.** { *; }
