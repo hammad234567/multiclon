@@ -12,7 +12,10 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - uses: android-actions/setup-android@v3
+      - name: Install NDK 29
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;29.0.13846066" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Get BlackBox source
         run: git clone --depth 1 https://github.com/ALEX5402/NewBlackbox src
