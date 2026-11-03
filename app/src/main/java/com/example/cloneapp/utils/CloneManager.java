@@ -4,17 +4,29 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Log;
 import android.widget.Toast;
 
 import com.example.cloneapp.models.CloneModel;
+import com.example.cloneapp.utils.PrefsHelper.GpsConfig;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+
+import top.niunaijun.blackbox.BlackBoxCore;
+import top.niunaijun.blackbox.entity.location.BLocation;
+import top.niunaijun.blackbox.entity.pm.InstallResult;
+import top.niunaijun.blackbox.fake.frameworks.BLocationManager;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Singleton manager handling clone lifecycle, persistence to SharedPreferences via Gson,
@@ -29,6 +41,15 @@ public class CloneManager {
     private final Context context;
     private final SharedPreferences prefs;
     private final Gson gson;
+    private static final String TAG = "CloneManager";
+    private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    /** Result callback for engine operations (always delivered on the main thread). */
+    public interface Callback {
+        void onSuccess();
+        void onError(String message);
+    }
 
     private CloneManager(Context context) {
         this.context = context.getApplicationContext();
@@ -147,49 +168,148 @@ public class CloneManager {
         return hidden;
     }
 
+    /** Picks the lowest engine user id not used by any existing clone (one user space per clone). */
+    private synchronized int nextFreeUserId() {
+        Set<Integer> used = new HashSet<>();
+        for (CloneModel c : getAllClones()) {
+            if (c.getVirtualUserId() >= 0) used.add(c.getVirtualUserId());
+        }
+        int id = 0;
+        while (used.contains(id)) id++;
+        return id;
+    }
+
+    /** Waits (off the UI thread) until the engine's services are up. */
+    private void ensureEngine() throws InterruptedException {
+        for (int i = 0; i < 20; i++) {
+            try {
+                if (BlackBoxCore.get().areServicesAvailable()) return;
+            } catch (Throwable t) {
+                Log.w(TAG, "engine not ready yet", t);
+            }
+            Thread.sleep(500);
+        }
+        throw new IllegalStateException("Engine did not start");
+    }
+
     /**
-     * Launches a clone instance in an independent Android task stack.
-     * Uses custom taskAffinity via FLAG_ACTIVITY_NEW_TASK, FLAG_ACTIVITY_MULTIPLE_TASK,
-     * FLAG_ACTIVITY_NEW_DOCUMENT and a distinct clone URI so it appears as its own task in Recents.
+     * Installs the target app into the engine in its own user space (own data, accounts, logins),
+     * then stores the clone. Heavy work runs off the UI thread.
      */
-    public void launchClone(Context ctx, CloneModel clone) {
+    public void addCloneAsync(final CloneModel clone, final Callback cb) {
+        worker.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    ensureEngine();
+                    int userId = nextFreeUserId();
+                    BlackBoxCore core = BlackBoxCore.get();
+                    core.createUser(userId);
+                    InstallResult res = core.installPackageAsUser(clone.getTargetPackage(), userId);
+                    if (res == null || !res.success) {
+                        throw new IllegalStateException("Engine install failed: " + (res != null ? res.msg : "null"));
+                    }
+                    clone.setVirtualUserId(userId);
+                    addClone(clone);
+                    postSuccess(cb);
+                } catch (Throwable t) {
+                    Log.e(TAG, "addCloneAsync failed", t);
+                    postError(cb, String.valueOf(t.getMessage()));
+                }
+            }
+        });
+    }
+
+    /** Removes the clone record and its virtual app and data from the engine. */
+    public void removeCloneAsync(final CloneModel clone, final Callback cb) {
+        worker.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (clone.getVirtualUserId() >= 0) {
+                        ensureEngine();
+                        BlackBoxCore.get().uninstallPackageAsUser(clone.getTargetPackage(), clone.getVirtualUserId());
+                        BlackBoxCore.get().deleteUser(clone.getVirtualUserId());
+                    }
+                } catch (Throwable t) {
+                    Log.e(TAG, "engine uninstall failed", t);
+                }
+                removeClone(clone.getId());
+                postSuccess(cb);
+            }
+        });
+    }
+
+    /** Pushes the clone's fake-GPS settings into the engine. */
+    private void applyGps(CloneModel clone) {
+        try {
+            GpsConfig gps = PrefsHelper.getInstance(context).getCloneGps(clone.getId());
+            BLocationManager lm = BLocationManager.get();
+            String pkg = clone.getTargetPackage();
+            int uid = clone.getVirtualUserId();
+            if (gps != null && gps.enabled) {
+                lm.setPattern(uid, pkg, BLocationManager.OWN_MODE);
+                lm.setLocation(uid, pkg, new BLocation(gps.latitude, gps.longitude));
+            } else {
+                lm.setPattern(uid, pkg, BLocationManager.CLOSE_MODE);
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "applyGps failed", t);
+        }
+    }
+
+    /** Launches a clone inside the engine, in its own user space. */
+    public void launchClone(final Context ctx, final CloneModel clone) {
         if (clone == null || clone.getTargetPackage() == null) {
             Toast.makeText(ctx, "Invalid clone configuration", Toast.LENGTH_SHORT).show();
             return;
         }
-
-        PackageManager pm = ctx.getPackageManager();
-        Intent launchIntent = pm.getLaunchIntentForPackage(clone.getTargetPackage());
-
-        if (launchIntent == null) {
-            Toast.makeText(ctx, "Target application " + clone.getTargetPackage() + " is not installed.", Toast.LENGTH_LONG).show();
+        if (clone.getVirtualUserId() < 0) {
+            Toast.makeText(ctx, "This clone was created before the engine was added. Please delete and re-create it.", Toast.LENGTH_LONG).show();
             return;
         }
+        Toast.makeText(ctx, "Launching " + clone.getCustomName() + "...", Toast.LENGTH_SHORT).show();
+        worker.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    ensureEngine();
+                    applyGps(clone);
+                    mainHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                boolean ok = BlackBoxCore.get().launchApk(clone.getTargetPackage(), clone.getVirtualUserId());
+                                if (!ok) {
+                                    Toast.makeText(ctx, "Clone is not installed in the engine", Toast.LENGTH_LONG).show();
+                                }
+                            } catch (Throwable t) {
+                                Log.e(TAG, "launchApk failed", t);
+                                Toast.makeText(ctx, "Failed to launch clone: " + t.getMessage(), Toast.LENGTH_LONG).show();
+                            }
+                        }
+                    });
+                } catch (final Throwable t) {
+                    Log.e(TAG, "launchClone failed", t);
+                    mainHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            Toast.makeText(ctx, "Failed to launch clone: " + t.getMessage(), Toast.LENGTH_LONG).show();
+                        }
+                    });
+                }
+            }
+        });
+    }
 
-        // Configure task isolation flags:
-        // FLAG_ACTIVITY_NEW_TASK: starts activity in a new task
-        // FLAG_ACTIVITY_MULTIPLE_TASK: generates a new task unconditionally
-        // FLAG_ACTIVITY_NEW_DOCUMENT: opens activity as a distinct document in the Recents screen
-        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        launchIntent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
-        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
+    private void postSuccess(final Callback cb) {
+        if (cb == null) return;
+        mainHandler.post(new Runnable() { @Override public void run() { cb.onSuccess(); } });
+    }
 
-        // Distinguish the intent so Android creates an independent task entry in Recents
-        launchIntent.setData(Uri.parse("cloneapp://" + clone.getTargetPackage() + "/" + clone.getId()));
-        launchIntent.setAction(Intent.ACTION_MAIN);
-        launchIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-
-        // Pass clone identifier extras
-        launchIntent.putExtra("com.example.cloneapp.EXTRA_CLONE_ID", clone.getId());
-        launchIntent.putExtra("com.example.cloneapp.EXTRA_CUSTOM_NAME", clone.getCustomName());
-        launchIntent.putExtra("com.example.cloneapp.EXTRA_AFFINITY_SUFFIX", clone.getId());
-
-        try {
-            ctx.startActivity(launchIntent);
-            Toast.makeText(ctx, "Launching " + clone.getCustomName() + "...", Toast.LENGTH_SHORT).show();
-        } catch (Exception e) {
-            Toast.makeText(ctx, "Failed to launch clone: " + e.getMessage(), Toast.LENGTH_LONG).show();
-        }
+    private void postError(final Callback cb, final String msg) {
+        if (cb == null) return;
+        mainHandler.post(new Runnable() { @Override public void run() { cb.onError(msg); } });
     }
 
     /**

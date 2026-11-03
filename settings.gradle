@@ -10,7 +10,11 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven { url "https://www.jitpack.io" }
     }
 }
 rootProject.name = "CloneApp"
 include ':app'
+include ':Bcore'
+include ':black-reflection'
+include ':compiler'

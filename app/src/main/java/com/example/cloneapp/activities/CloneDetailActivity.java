@@ -182,8 +182,17 @@ public class CloneDetailActivity extends AppCompatActivity {
                         .setPositiveButton(R.string.dialog_delete_confirm, new DialogInterface.OnClickListener() {
                             @Override
                             public void onClick(DialogInterface dialog, int which) {
-                                cloneManager.removeClone(cloneId);
-                                Toast.makeText(CloneDetailActivity.this, "Clone deleted", Toast.LENGTH_SHORT).show();
+                                com.example.cloneapp.models.CloneModel target = cloneManager.getCloneById(cloneId);
+                                if (target == null) { finish(); return; }
+                                final android.content.Context appCtx = getApplicationContext();
+                                cloneManager.removeCloneAsync(target, new CloneManager.Callback() {
+                                    @Override public void onSuccess() {
+                                        Toast.makeText(appCtx, "Clone deleted", Toast.LENGTH_SHORT).show();
+                                    }
+                                    @Override public void onError(String message) {
+                                        Toast.makeText(appCtx, message, Toast.LENGTH_LONG).show();
+                                    }
+                                });
                                 finish();
                             }
                         })

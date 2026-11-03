@@ -15,6 +15,8 @@ public class CloneModel implements Serializable {
     private String customIconBase64;
     private boolean isHidden;
     private long createdAt;
+    /** Engine user space id this clone lives in; -1 = not installed in the engine yet. */
+    private int virtualUserId = -1;
 
     public CloneModel() {
     }
@@ -26,6 +28,14 @@ public class CloneModel implements Serializable {
         this.customIconBase64 = customIconBase64;
         this.isHidden = isHidden;
         this.createdAt = createdAt;
+    }
+
+    public int getVirtualUserId() {
+        return virtualUserId;
+    }
+
+    public void setVirtualUserId(int virtualUserId) {
+        this.virtualUserId = virtualUserId;
     }
 
     public String getId() {

@@ -11,3 +11,7 @@
     java.lang.Object writeReplace();
     java.lang.Object readResolve();
 }
+
+# BlackBox engine
+-keep class top.niunaijun.blackbox.** { *; }
+-keep class black.** { *; }

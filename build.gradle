@@ -4,14 +4,23 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.4.1'
+        classpath 'com.android.tools.build:gradle:8.13.2'
     }
+}
+
+ext {
+    compileSdkVersion = 35
+    targetSdkVersion = 28
+    minSdk = 21
+    xVersion = '1.1.0'
+    hiddenApiBypass = '4.3'
 }
 
 allprojects {
     repositories {
         google()
         mavenCentral()
+        maven { url "https://www.jitpack.io" }
     }
 }
 
