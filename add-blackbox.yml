@@ -1,0 +1,54 @@
+name: Add BlackBox engine and build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install Android build tools
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;29.0.13846066" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Fetch BlackBox engine and apply changes
+        run: |
+          set -e
+          git clone https://github.com/ALEX5402/NewBlackbox /tmp/bb
+          git -C /tmp/bb checkout 89b59836c66f173756a4ae258cf379a957649820
+          for m in Bcore black-reflection compiler; do rm -rf $m; cp -r /tmp/bb/$m ./$m; done
+          cp /tmp/bb/gradlew /tmp/bb/gradlew.bat .
+          mkdir -p gradle/wrapper
+          cp /tmp/bb/gradle/wrapper/* gradle/wrapper/
+          tar xzf blackbox-files.tgz
+          rm -f blackbox-files.tgz engine-files.tgz
+
+      - name: Push to branch blackbox-integration
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git checkout -b blackbox-integration
+          git add -A
+          git commit -m "Add BlackBox engine"
+          git push -f origin blackbox-integration
+
+      - name: Build APK
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug --console=plain
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: multiclone-blackbox-apk
+          path: app/build/outputs/apk/debug/*.apk
